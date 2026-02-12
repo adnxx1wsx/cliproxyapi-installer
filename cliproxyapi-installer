@@ -386,32 +386,35 @@ fetch_release_info() {
 extract_release_info() {
     local release_info="$1"
     local os_arch="$2"
-    
+
     local version
     version=$(echo "$release_info" | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4 | sed 's/^v//')
-    
+
     if [[ -z "$version" ]]; then
         log_error "Failed to extract version from release info"
         exit 1
     fi
-    
+
     local expected_filename="CLIProxyAPI_${version}_${os_arch}"
     local download_url=""
-    
-    # Handle different file extensions
+
+    # Handle different file extensions - windows has .exe suffix
     if [[ "$os_arch" == windows_* ]]; then
-        expected_filename="${expected_filename}.zip"
-    else
-        expected_filename="${expected_filename}.tar.gz"
+        expected_filename="${expected_filename}.exe"
     fi
-    
-    download_url=$(echo "$release_info" | grep -o "\"browser_download_url\": *\"[^\"]*${expected_filename}[^\"]*\"" | cut -d'"' -f4)
-    
+    # Linux/macOS: no extension, bare binary
+
+    # Search for exact filename match in browser_download_url
+    download_url=$(echo "$release_info" | grep -o "\"browser_download_url\": *\"[^\"]*${expected_filename}\"" | cut -d'"' -f4)
+
     if [[ -z "$download_url" ]]; then
         log_error "Failed to find download URL for ${expected_filename}"
+        log_error "Available assets:"
+        echo "$release_info" | grep -o '"name": *"[^"]*"' | head -20
         exit 1
     fi
-    
+
+    log_info "Found download URL: $download_url"
     echo "${version}|${download_url}"
 }
 
@@ -605,33 +608,33 @@ EOF
 setup_config() {
     local version_dir="$1"
     local backup_file="$2"
-    
+
     log_info "Setting up configuration..."
-    
+
     local config="${INSTALL_DIR}/config.yaml"
-    local example_config="${version_dir}/config.example.yaml"
     local executable="${version_dir}/cli-proxy-api"
-    
-    # Copy executable to main directory
-    if [[ -f "$executable" ]]; then
+
+    # Copy executable to main directory (if not already done)
+    if [[ -f "$executable" && ! -f "${INSTALL_DIR}/cli-proxy-api" ]]; then
         cp "$executable" "${INSTALL_DIR}/cli-proxy-api"
+        chmod +x "${INSTALL_DIR}/cli-proxy-api"
         log_success "Copied executable to ${INSTALL_DIR}/cli-proxy-api"
     fi
-    
+
     # PRIORITY 1: If we have a backup from this upgrade, restore it
     if [[ -n "$backup_file" && -f "$backup_file" ]]; then
         cp "$backup_file" "$config"
         log_success "Restored configuration from backup"
         return
     fi
-    
+
     # PRIORITY 2: Check for existing config in main directory (NEVER overwrite)
     if [[ -f "$config" ]]; then
         log_success "Preserved existing user configuration (config.yaml)"
         log_info "User modifications are protected during upgrades"
         return
     fi
-    
+
     # PRIORITY 3: Check for existing config in previous version directory
     local current_version_dir
     current_version_dir=$(get_current_version_dir)
@@ -640,27 +643,27 @@ setup_config() {
         log_success "Preserved existing configuration from previous version"
         return
     fi
-    
-    # PRIORITY 4: Only create from example if NO existing config found
-    if [[ -f "$example_config" ]]; then
-        cp "$example_config" "$config"
 
-        # Generate and replace API key
-        local generated_key1
-        local generated_key2
-        generated_key1=$(generate_api_key)
-        generated_key2=$(generate_api_key)
+    # PRIORITY 4: Create minimal default config if NO existing config found
+    log_info "Creating default configuration file..."
+    cat > "$config" << 'CONFIGEOF'
+# CLIProxyAPI Configuration
+# API keys for authenticating requests to this proxy
+api-keys:
+CONFIGEOF
 
-        # Replace placeholder API keys with generated keys
-        sed -i "s/\"your-api-key-1\"/\"$generated_key1\"/g" "$config"
-        sed -i "s/\"your-api-key-2\"/\"$generated_key2\"/g" "$config"
+    # Generate API keys
+    local generated_key1
+    local generated_key2
+    generated_key1=$(generate_api_key)
+    generated_key2=$(generate_api_key)
 
-        log_success "Created config.yaml from example with generated API keys"
-        log_info "Generated API keys: $generated_key1, $generated_key2"
-        log_info "You can find your API keys in: $config"
-    else
-        log_warning "config.example.yaml not found, you may need to create config.yaml manually"
-    fi
+    echo "  - \"$generated_key1\"" >> "$config"
+    echo "  - \"$generated_key2\"" >> "$config"
+
+    log_success "Created config.yaml with generated API keys"
+    log_info "Generated API keys: $generated_key1, $generated_key2"
+    log_info "You can find your API keys in: $config"
 }
 
 # Download file
@@ -684,17 +687,21 @@ download_file() {
     log_success "Download completed"
 }
 
-# Extract tar.gz archive
-extract_archive() {
-    local archive="$1"
+# Install binary directly (no archive extraction needed)
+install_binary() {
+    local binary_file="$1"
     local dest_dir="$2"
+    local version="$3"
 
-    log_info "Extracting archive to $dest_dir..."
+    log_info "Installing binary to $dest_dir..."
 
     mkdir -p "$dest_dir"
-    tar -xzf "$archive" -C "$dest_dir"
 
-    log_success "Extraction completed"
+    # Copy binary to version directory as cli-proxy-api
+    cp "$binary_file" "${dest_dir}/cli-proxy-api"
+    chmod +x "${dest_dir}/cli-proxy-api"
+
+    log_success "Binary installed successfully"
 }
 
 # Write version file
@@ -808,23 +815,20 @@ install_cliproxyapi() {
     local version_dir="${INSTALL_DIR}/${version}"
     mkdir -p "$INSTALL_DIR"
     
-    # Download and extract
+    # Download and install
     local temp_file
     temp_file=$(mktemp)
-    
+
     download_file "$download_url" "$temp_file"
-    extract_archive "$temp_file" "$version_dir"
-    
+    install_binary "$temp_file" "$version_dir" "$version"
+
     # Cleanup temp file
     rm -f "$temp_file"
-    
-    # Make binary executable
-    make_executable "$version_dir"
-    
+
     # Setup configuration and copy executable to main directory
     setup_config "$version_dir" "$backup_file"
-    
-    # Make main executable executable
+
+    # Make main executable executable (ensure permissions)
     chmod +x "${INSTALL_DIR}/cli-proxy-api"
     
     # Create/update systemd service file
