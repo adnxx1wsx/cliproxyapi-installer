@@ -414,7 +414,7 @@ extract_release_info() {
         exit 1
     fi
 
-    log_info "Found download URL: $download_url"
+    # Output version and URL (must be on single line, no logging here)
     echo "${version}|${download_url}"
 }
 
@@ -786,9 +786,10 @@ install_cliproxyapi() {
     release_data=$(extract_release_info "$release_info" "$os_arch")
     local version=$(echo "$release_data" | cut -d'|' -f1)
     local download_url=$(echo "$release_data" | cut -d'|' -f2)
-    
+
     log_step "Latest version: $version"
-    
+    log_info "Download URL: $download_url"
+
     # Check if already up to date
     if [[ "$is_upgrade" == true && "$current_version" == "$version" ]]; then
         log_success "CLIProxyAPI is already up to date (version $version)"
