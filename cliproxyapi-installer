@@ -351,20 +351,34 @@ check_dependencies() {
 
 # Fetch latest release info from GitHub API
 fetch_release_info() {
-    log_info "Fetching latest release information..."
-    
+    log_info "Fetching release information from: $API_URL"
+
     local release_info
+    local http_code
+
     if command -v curl >/dev/null 2>&1; then
-        release_info=$(curl -s "$API_URL")
+        # Use curl with timeout and show HTTP status code
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$API_URL")
+        if [[ "$http_code" != "200" ]]; then
+            log_error "GitHub API returned HTTP $http_code"
+            log_error "URL: $API_URL"
+            if [[ "$http_code" == "404" ]]; then
+                log_error "Release v6.8.15 not found. Check if the tag exists in your repository."
+            fi
+            exit 1
+        fi
+        release_info=$(curl -s --connect-timeout 10 --max-time 30 "$API_URL")
     else
-        release_info=$(wget -qO- "$API_URL")
+        release_info=$(wget -qO- --timeout=30 "$API_URL")
     fi
-    
+
     if [[ -z "$release_info" ]]; then
         log_error "Failed to fetch release information from GitHub API"
+        log_error "Please check your network connection and try again"
         exit 1
     fi
-    
+
+    log_success "Release information fetched successfully"
     echo "$release_info"
 }
 
