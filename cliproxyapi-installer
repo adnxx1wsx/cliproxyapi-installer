@@ -10,7 +10,7 @@ set -euo pipefail
 REPO_OWNER="adnxx1wsx"
 REPO_NAME="CLIProxyAPI"
 INSTALL_DIR="$HOME/cliproxyapi"
-API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/v6.8.21"
+API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/v6.8.22"
 SCRIPT_NAME="cliproxyapi-installer"
 
 # Colors for output
@@ -363,7 +363,7 @@ fetch_release_info() {
             log_error "GitHub API returned HTTP $http_code"
             log_error "URL: $API_URL"
             if [[ "$http_code" == "404" ]]; then
-                log_error "Release v6.8.21 not found. Check if the tag exists in your repository."
+                log_error "Release v6.8.22 not found. Check if the tag exists in your repository."
             fi
             exit 1
         fi
