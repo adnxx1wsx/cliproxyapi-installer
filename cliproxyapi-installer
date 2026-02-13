@@ -10,7 +10,7 @@ set -euo pipefail
 REPO_OWNER="adnxx1wsx"
 REPO_NAME="CLIProxyAPI"
 INSTALL_DIR="$HOME/cliproxyapi"
-API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/v6.8.17"
+API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/v6.8.18"
 SCRIPT_NAME="cliproxyapi-installer"
 
 # Colors for output
@@ -363,7 +363,7 @@ fetch_release_info() {
             log_error "GitHub API returned HTTP $http_code"
             log_error "URL: $API_URL"
             if [[ "$http_code" == "404" ]]; then
-                log_error "Release v6.8.17 not found. Check if the tag exists in your repository."
+                log_error "Release v6.8.18 not found. Check if the tag exists in your repository."
             fi
             exit 1
         fi
@@ -614,11 +614,13 @@ setup_config() {
     local config="${INSTALL_DIR}/config.yaml"
     local executable="${version_dir}/cli-proxy-api"
 
-    # Copy executable to main directory (if not already done)
-    if [[ -f "$executable" && ! -f "${INSTALL_DIR}/cli-proxy-api" ]]; then
+    # Always copy executable to main directory (overwrite for upgrades)
+    if [[ -f "$executable" ]]; then
         cp "$executable" "${INSTALL_DIR}/cli-proxy-api"
         chmod +x "${INSTALL_DIR}/cli-proxy-api"
         log_success "Copied executable to ${INSTALL_DIR}/cli-proxy-api"
+    else
+        log_warning "Executable not found in version directory: $executable"
     fi
 
     # PRIORITY 1: If we have a backup from this upgrade, restore it
